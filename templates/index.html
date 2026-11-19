@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7f2">
+  <title>Daymark | Make room for the work</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="landing-page">
+  <header class="site-header wrap">
+    <a class="brand" href="/" aria-label="Daymark home"><span class="brand-mark">d</span>daymark</a>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="#method">The method</a>
+      <a class="nav-cta" href="/dashboard">Open workspace <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero wrap" id="method">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="eyebrow-dot"></span> A calmer way to get things done</p>
+        <h1>Make room<br>for the <em>work</em>.</h1>
+        <p class="hero-lede">A thoughtful little home for your to-dos. Keep the important things close, and let the rest wait its turn.</p>
+        <a class="button button-primary button-large" href="/dashboard">Get started <span aria-hidden="true">→</span></a>
+        <p class="hero-footnote">Free to use. Your tasks stay on this device.</p>
+      </div>
+      <div class="hero-art" aria-label="Preview of the Daymark task dashboard">
+        <div class="art-orbit orbit-one"></div>
+        <div class="art-orbit orbit-two"></div>
+        <div class="preview-window">
+          <div class="preview-top"><span class="preview-brand"><span class="brand-mark small">d</span> daymark</span><span class="preview-date">MON, OCT 21</span></div>
+          <div class="preview-greeting">A good day to begin.</div>
+          <div class="preview-progress"><span>YOUR FOCUS</span><strong>2 of 5 complete</strong><i><b></b></i></div>
+          <div class="preview-task done-task"><span class="check-icon">✓</span><span>Clear the morning inbox</span><small>DONE</small></div>
+          <div class="preview-task active-task"><span class="empty-check"></span><span>Sketch the new project plan</span><small>HIGH</small></div>
+          <div class="preview-task"><span class="empty-check"></span><span>Pick up a few groceries</span><small>LOW</small></div>
+          <div class="preview-add"><span>＋</span> Add a task</div>
+        </div>
+        <div class="art-note"><span class="note-star">✳</span><span>One thing<br>at a time.</span></div>
+        <div class="art-scribble" aria-hidden="true">a little more<br>headspace</div>
+      </div>
+    </section>
+
+    <section class="principle-band">
+      <div class="wrap principle-inner">
+        <span class="principle-index">01 / THE IDEA</span>
+        <h2>Less mental clutter.<br><em>More meaningful progress.</em></h2>
+        <p>Capture what matters, see what’s next, and move through your day at a pace that feels like yours.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer wrap"><a class="brand" href="/"><span class="brand-mark">d</span>daymark</a><span>Made for the days you have.</span></footer>
+</body>
+</html>
