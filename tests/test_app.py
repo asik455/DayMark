@@ -83,6 +83,33 @@ class TaskApiTests(unittest.TestCase):
         )
         self.assertEqual(self.client.delete("/api/tasks/missing").status_code, 404)
 
+    def test_robots_and_sitemap_use_the_request_host(self):
+        robots = self.client.get("/robots.txt", base_url="https://tasks.example")
+        sitemap = self.client.get("/sitemap.xml", base_url="https://tasks.example")
+
+        self.assertEqual(robots.status_code, 200)
+        self.assertEqual(robots.mimetype, "text/plain")
+        self.assertIn("Sitemap: https://tasks.example/sitemap.xml", robots.get_data(as_text=True))
+        self.assertEqual(sitemap.status_code, 200)
+        self.assertEqual(sitemap.mimetype, "application/xml")
+        self.assertIn("<loc>https://tasks.example/</loc>", sitemap.get_data(as_text=True))
+
+    def test_seo_routes_use_configured_site_url(self):
+        app = create_app(
+            {
+                "TESTING": True,
+                "TASKS_FILE": self.tasks_file,
+                "SITE_URL": "https://canonical.example/",
+            }
+        )
+        client = app.test_client()
+
+        robots = client.get("/robots.txt", base_url="https://request.example")
+        sitemap = client.get("/sitemap.xml", base_url="https://request.example")
+
+        self.assertIn("Sitemap: https://canonical.example/sitemap.xml", robots.get_data(as_text=True))
+        self.assertIn("<loc>https://canonical.example/</loc>", sitemap.get_data(as_text=True))
+
 
 if __name__ == "__main__":
     unittest.main()

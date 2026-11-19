@@ -53,3 +53,16 @@ python -m unittest discover -s tests -v
 | `GET` | `/api/stats` | Read task totals by status |
 
 Task JSON fields are `title`, `description`, `priority` (`Low`, `Medium`, `High`), `status` (`To do`, `In progress`, `Done`), and `due_date` (`YYYY-MM-DD` or an empty string). The app creates `instance/tasks.json` on the first write.
+
+## Search indexing and deployment
+
+`/robots.txt` allows crawling and points crawlers to `/sitemap.xml`. The sitemap includes the site root. Set `SITE_URL` to the canonical public origin in the deployment environment so generated URLs consistently use your public domain. If it is unset, the current request host is used.
+
+Gunicorn is included for Linux-based deployments. Set the canonical URL and start the app with:
+
+```sh
+export SITE_URL="https://tasks.example.com"
+gunicorn app:app
+```
+
+Gunicorn is not supported on Windows; use `python app.py` for local Windows development.

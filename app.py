@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 
 PRIORITIES = {"Low", "Medium", "High"}
@@ -17,6 +17,7 @@ def create_app(test_config=None):
     app.config.from_mapping(
         TASKS_FILE=Path(app.instance_path) / "tasks.json",
         MAX_CONTENT_LENGTH=1024 * 1024,
+        SITE_URL=os.environ.get("SITE_URL", "").rstrip("/"),
     )
     if test_config:
         app.config.update(test_config)
@@ -94,6 +95,21 @@ def create_app(test_config=None):
     @app.get("/dashboard")
     def dashboard():
         return render_template("dashboard.html")
+
+    @app.get("/robots.txt")
+    def robots():
+        site_url = (app.config["SITE_URL"] or request.url_root).rstrip("/")
+        content = f"User-agent: *\nAllow: /\nSitemap: {site_url}/sitemap.xml\n"
+        return Response(content, mimetype="text/plain")
+
+    @app.get("/sitemap.xml")
+    def sitemap():
+        site_url = (app.config["SITE_URL"] or request.url_root).rstrip("/")
+        xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{site_url}/</loc></url>
+</urlset>'''
+        return Response(xml, mimetype="application/xml")
 
     @app.get("/api/tasks")
     def list_tasks():
