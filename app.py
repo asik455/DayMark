@@ -58,7 +58,12 @@ def create_app(test_config=None):
                 raise DatabaseConfigurationError(
                     "MongoDB is not configured. Set MONGO_URI in the environment."
                 )
-            mongo_client = MongoClient(mongo_uri)
+            mongo_client = MongoClient(
+                mongo_uri,
+                w=1,
+                wtimeoutms=5000,
+                serverSelectionTimeoutMS=15000,
+            )
             database = mongo_client.get_default_database(
                 default=app.config["MONGO_DB_NAME"]
             )
