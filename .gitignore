@@ -2,3 +2,6 @@
 __pycache__/
 tests/__pycache__/
 instance/tasks.json
+.env
+.env.*
+!.env.example

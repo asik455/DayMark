@@ -1,6 +1,6 @@
 # Daymark Task Manager
 
-A small, responsive task manager built with Flask, HTML, CSS, and vanilla JavaScript. Tasks are stored in a local JSON file; no database or frontend build step is required.
+A small, responsive task manager built with Flask, HTML, CSS, vanilla JavaScript, and MongoDB Atlas. Tasks are stored in MongoDB; no frontend build step is required.
 
 ## Features
 
@@ -10,7 +10,7 @@ A small, responsive task manager built with Flask, HTML, CSS, and vanilla JavaSc
 - Search across task titles and descriptions; filter by status and priority
 - Live task counts for total, to do, in progress, and completed work
 - Filter preferences saved in browser cookies
-- JSON persistence in `instance/tasks.json`
+- MongoDB persistence in the `tasks` collection
 - REST API consumed with the Fetch API
 
 ## Requirements
@@ -34,6 +34,10 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
+Set `MONGO_URI` in a local `.env` file before starting the app. Copy `.env.example` as a starting point and replace the placeholders with your Atlas connection string. The `.env` file is ignored by Git. Ensure the Atlas database user and network access list allow this application to connect. The database defaults to the name in the connection string (or `mydb` if none is present).
+
+On its first MongoDB operation, the app imports tasks from an existing `instance/tasks.json` file that are not already present in the MongoDB `tasks` collection. New records include `id`, `title`, `description`, `priority`, `status`, `due_date`, `created_at`, and `updated_at`.
+
 Open <http://127.0.0.1:5000> in your browser. The workspace is at <http://127.0.0.1:5000/dashboard>.
 
 To run the tests:
@@ -52,7 +56,7 @@ python -m unittest discover -s tests -v
 | `DELETE` | `/api/tasks/<id>` | Delete a task |
 | `GET` | `/api/stats` | Read task totals by status |
 
-Task JSON fields are `title`, `description`, `priority` (`Low`, `Medium`, `High`), `status` (`To do`, `In progress`, `Done`), and `due_date` (`YYYY-MM-DD` or an empty string). The app creates `instance/tasks.json` on the first write.
+Task JSON fields are `title`, `description`, `priority` (`Low`, `Medium`, `High`), `status` (`To do`, `In progress`, `Done`), and `due_date` (`YYYY-MM-DD` or an empty string). The MongoDB `tasks` collection enforces unique task IDs.
 
 ## Search indexing and deployment
 

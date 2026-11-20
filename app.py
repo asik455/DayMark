@@ -5,25 +5,49 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request
+from pymongo import MongoClient, ReturnDocument
+from pymongo.errors import PyMongoError
 
 
 PRIORITIES = {"Low", "Medium", "High"}
 STATUSES = {"To do", "In progress", "Done"}
 
+load_dotenv()
+
+
+class DatabaseConfigurationError(Exception):
+    pass
+
 
 def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_mapping(
-        TASKS_FILE=Path(app.instance_path) / "tasks.json",
+        TASKS_FILE=None,
+        LEGACY_TASKS_FILE=Path(app.instance_path) / "tasks.json",
+        MONGO_URI=os.environ.get("MONGO_URI"),
+        MONGO_DB_NAME=os.environ.get("MONGO_DB_NAME", "mydb"),
         MAX_CONTENT_LENGTH=1024 * 1024,
         SITE_URL=os.environ.get("SITE_URL", "").rstrip("/"),
     )
     if test_config:
         app.config.update(test_config)
 
-    def read_tasks():
-        path = Path(app.config["TASKS_FILE"])
+    mongo_client = None
+    tasks_collection = None
+    if app.config["TASKS_FILE"] is None and app.config["MONGO_URI"]:
+        mongo_client = MongoClient(app.config["MONGO_URI"])
+        database = mongo_client.get_default_database(
+            default=app.config["MONGO_DB_NAME"]
+        )
+        tasks_collection = database["tasks"]
+    app.extensions["mongo_client"] = mongo_client
+    app.extensions["tasks_collection"] = tasks_collection
+    app.extensions["mongo_initialized"] = False
+
+    def read_json_tasks(path):
+        path = Path(path)
         if not path.exists():
             return []
         try:
@@ -33,6 +57,34 @@ def create_app(test_config=None):
             app.logger.exception("Unable to read task storage")
             return []
         return tasks if isinstance(tasks, list) else []
+
+    def get_tasks_collection():
+        collection = app.extensions["tasks_collection"]
+        if collection is None:
+            raise DatabaseConfigurationError(
+                "MongoDB is not configured. Set MONGO_URI in the environment."
+            )
+        if not app.extensions["mongo_initialized"]:
+            collection.create_index("id", unique=True)
+            for task in read_json_tasks(app.config["LEGACY_TASKS_FILE"]):
+                if isinstance(task, dict) and isinstance(task.get("id"), str):
+                    collection.update_one(
+                        {"id": task["id"]},
+                        {"$setOnInsert": task},
+                        upsert=True,
+                    )
+            app.extensions["mongo_initialized"] = True
+        return collection
+
+    def read_tasks():
+        if app.config["TASKS_FILE"] is not None:
+            return read_json_tasks(app.config["TASKS_FILE"])
+        collection = get_tasks_collection()
+        documents = collection.find().sort([("created_at", 1), ("id", 1)])
+        return [
+            {key: value for key, value in task.items() if key != "_id"}
+            for task in documents
+        ]
 
     def write_tasks(tasks):
         path = Path(app.config["TASKS_FILE"])
@@ -48,6 +100,15 @@ def create_app(test_config=None):
         finally:
             if temporary_path and os.path.exists(temporary_path):
                 os.unlink(temporary_path)
+
+    @app.errorhandler(DatabaseConfigurationError)
+    def handle_database_configuration_error(error):
+        return jsonify({"error": str(error)}), 503
+
+    @app.errorhandler(PyMongoError)
+    def handle_database_error(error):
+        app.logger.error("MongoDB operation failed: %s", type(error).__name__)
+        return jsonify({"error": "MongoDB is unavailable."}), 503
 
     def validate_task(data):
         if not isinstance(data, dict):
@@ -156,9 +217,12 @@ def create_app(test_config=None):
             "created_at": now,
             "updated_at": now,
         }
-        tasks = read_tasks()
-        tasks.append(task)
-        write_tasks(tasks)
+        if app.config["TASKS_FILE"] is not None:
+            tasks = read_tasks()
+            tasks.append(task)
+            write_tasks(tasks)
+        else:
+            get_tasks_collection().insert_one(task.copy())
         return jsonify(task), 201
 
     @app.put("/api/tasks/<task_id>")
@@ -166,26 +230,46 @@ def create_app(test_config=None):
         data, error = validate_task(request.get_json(silent=True))
         if error:
             return jsonify({"error": error}), 400
-        tasks = read_tasks()
-        for index, task in enumerate(tasks):
-            if task["id"] == task_id:
-                updated = {
-                    **task,
-                    **data,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-                tasks[index] = updated
-                write_tasks(tasks)
+        if app.config["TASKS_FILE"] is not None:
+            tasks = read_tasks()
+            for index, task in enumerate(tasks):
+                if task["id"] == task_id:
+                    updated = {
+                        **task,
+                        **data,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    tasks[index] = updated
+                    write_tasks(tasks)
+                    return jsonify(updated)
+        else:
+            updated = get_tasks_collection().find_one_and_update(
+                {"id": task_id},
+                {
+                    "$set": {
+                        **data,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                },
+                return_document=ReturnDocument.AFTER,
+            )
+            if updated:
+                updated.pop("_id", None)
                 return jsonify(updated)
         return jsonify({"error": "Task not found."}), 404
 
     @app.delete("/api/tasks/<task_id>")
     def delete_task(task_id):
-        tasks = read_tasks()
-        remaining = [task for task in tasks if task["id"] != task_id]
-        if len(remaining) == len(tasks):
-            return jsonify({"error": "Task not found."}), 404
-        write_tasks(remaining)
+        if app.config["TASKS_FILE"] is not None:
+            tasks = read_tasks()
+            remaining = [task for task in tasks if task["id"] != task_id]
+            if len(remaining) == len(tasks):
+                return jsonify({"error": "Task not found."}), 404
+            write_tasks(remaining)
+        else:
+            result = get_tasks_collection().delete_one({"id": task_id})
+            if result.deleted_count == 0:
+                return jsonify({"error": "Task not found."}), 404
         return jsonify({"message": "Task deleted."})
 
     return app

@@ -83,6 +83,20 @@ class TaskApiTests(unittest.TestCase):
         )
         self.assertEqual(self.client.delete("/api/tasks/missing").status_code, 404)
 
+    def test_mongo_backend_requires_a_connection_string(self):
+        app = create_app(
+            {
+                "TESTING": True,
+                "TASKS_FILE": None,
+                "MONGO_URI": None,
+            }
+        )
+
+        response = app.test_client().get("/api/tasks")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("MONGO_URI", response.get_json()["error"])
+
     def test_robots_and_sitemap_use_the_request_host(self):
         robots = self.client.get("/robots.txt", base_url="https://tasks.example")
         sitemap = self.client.get("/sitemap.xml", base_url="https://tasks.example")

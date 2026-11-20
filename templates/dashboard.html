@@ -14,7 +14,7 @@
 <body class="dashboard-page">
   <header class="workspace-header">
     <a class="brand" href="/" aria-label="Daymark home"><span class="brand-mark">d</span>daymark</a>
-    <div class="header-right"><span class="local-label"><span></span> Saved on this device</span><a class="home-link" href="/">Back to home <span aria-hidden="true">↗</span></a></div>
+    <div class="header-right"><span class="local-label"><span></span> Saved to your workspace</span><a class="home-link" href="/">Back to home <span aria-hidden="true">↗</span></a></div>
   </header>
 
   <main class="workspace wrap">
@@ -59,6 +59,15 @@
       <p class="form-error" id="form-error" role="alert"></p>
       <div class="dialog-actions"><button class="button button-quiet" id="cancel-dialog" type="button">Cancel</button><button class="button button-primary" id="save-task" type="submit">Save task</button></div>
     </form>
+  </dialog>
+  <dialog class="confirm-dialog" id="delete-dialog" aria-labelledby="delete-dialog-title">
+    <div class="confirm-icon" aria-hidden="true">×</div>
+    <h2 id="delete-dialog-title">Delete this task?</h2>
+    <p>This action can’t be undone.</p>
+    <div class="confirm-actions">
+      <button class="button button-quiet" id="cancel-delete" type="button">Cancel</button>
+      <button class="button button-danger" id="confirm-delete" type="button">Delete task</button>
+    </div>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>

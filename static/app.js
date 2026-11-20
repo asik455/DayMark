@@ -6,6 +6,8 @@ const statusFilter = document.querySelector("#status-filter");
 const priorityFilter = document.querySelector("#priority-filter");
 const formError = document.querySelector("#form-error");
 const toast = document.querySelector("#toast");
+const deleteDialog = document.querySelector("#delete-dialog");
+let pendingDeleteId = null;
 
 const readCookie = (name) => {
   const entry = document.cookie.split("; ").find((part) => part.startsWith(`${name}=`));
@@ -49,7 +51,7 @@ function renderTask(task) {
     <span class="priority-tag priority-${task.priority.toLowerCase()}"><i></i>${escapeHtml(task.priority)}</span>
     <span class="status-tag status-${task.status.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(task.status)}</span>
     <span class="due-date ${isOverdue ? "is-overdue" : ""}">${escapeHtml(formatDueDate(task.due_date))}${isOverdue ? " · late" : ""}</span>
-    <div class="task-actions"><button type="button" data-action="edit" aria-label="Edit ${escapeHtml(task.title)}" title="Edit task">↗</button><button type="button" data-action="delete" aria-label="Delete ${escapeHtml(task.title)}" title="Delete task">×</button></div>
+    <div class="task-actions"><button class="task-action-edit" type="button" data-action="edit" aria-label="Edit ${escapeHtml(task.title)}">Edit</button><button class="task-action-delete" type="button" data-action="delete" aria-label="Delete ${escapeHtml(task.title)}">Delete</button></div>
   </article>`;
 }
 
@@ -139,14 +141,8 @@ taskList.addEventListener("click", async (event) => {
   if (!row) return;
   const id = row.dataset.taskId;
   if (action === "delete") {
-    if (!window.confirm("Delete this task? This can’t be undone.")) return;
-    const response = await fetch(`/api/tasks/${encodeURIComponent(id)}`, { method: "DELETE" });
-    if (response.ok) {
-      showToast("Task deleted");
-      await loadTasks();
-    } else {
-      showToast("Could not delete this task");
-    }
+    pendingDeleteId = id;
+    deleteDialog.showModal();
     return;
   }
   const response = await fetch("/api/tasks");
@@ -168,6 +164,23 @@ taskList.addEventListener("click", async (event) => {
 document.querySelector("#add-task-button").addEventListener("click", () => openDialog());
 document.querySelector("#close-dialog").addEventListener("click", () => dialog.close());
 document.querySelector("#cancel-dialog").addEventListener("click", () => dialog.close());
+document.querySelector("#cancel-delete").addEventListener("click", () => {
+  pendingDeleteId = null;
+  deleteDialog.close();
+});
+document.querySelector("#confirm-delete").addEventListener("click", async () => {
+  if (!pendingDeleteId) return;
+  const id = pendingDeleteId;
+  pendingDeleteId = null;
+  deleteDialog.close();
+  const response = await fetch(`/api/tasks/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (response.ok) {
+    showToast("Task deleted");
+    await loadTasks();
+  } else {
+    showToast("Could not delete this task");
+  }
+});
 form.addEventListener("submit", submitTask);
 searchInput.addEventListener("input", () => {
   window.clearTimeout(searchTimer);
