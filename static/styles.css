@@ -85,6 +85,8 @@ button { cursor: pointer; }
 .dashboard-page { min-height: 100vh; background: #f8f9f6; }
 .workspace-header { display: flex; height: 72px; align-items: center; justify-content: space-between; padding-inline: max(32px, calc((100% - 1120px) / 2)); border-bottom: 1px solid var(--line); background: rgba(255,255,255,.7); }
 .header-right { display: flex; align-items: center; gap: 30px; }
+.header-right form { margin: 0; }
+.logout-button { padding: 0; border: 0; background: transparent; }
 .local-label, .home-link { color: #758078; font-size: 11px; font-weight: 600; }
 .local-label { display: flex; align-items: center; gap: 8px; }
 .local-label span { width: 7px; height: 7px; border-radius: 50%; background: #63a47a; }
@@ -179,6 +181,19 @@ textarea.text-field { resize: vertical; }
 .button:disabled { cursor: wait; opacity: .6; }
 .toast { position: fixed; right: 24px; bottom: 22px; z-index: 5; padding: 12px 17px; border-radius: 4px; background: var(--ink); color: white; font-size: 12px; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .2s ease, transform .2s ease; }
 .toast.is-visible { opacity: 1; transform: translateY(0); }
+
+/* Authentication */
+.auth-page { min-height: 100vh; background: #eef2eb; }
+.auth-shell { width: min(430px, calc(100% - 38px)); margin: 0 auto; padding-block: 56px; }
+.auth-shell > .brand { margin-bottom: 38px; }
+.auth-card { padding: 32px; border: 1px solid var(--line); border-radius: 7px; background: white; box-shadow: 0 24px 70px rgba(35, 66, 51, .10); }
+.auth-card h1 { margin: 8px 0 7px; font-family: var(--font-display); font-size: 29px; }
+.auth-lede { margin: 0 0 22px; color: #7a8580; font-size: 12px; }
+.auth-card .field-label { margin-top: 12px; }
+.auth-submit { width: 100%; margin-top: 20px; }
+.auth-error { margin: 10px 0 0; padding: 10px 12px; border-radius: 4px; background: #f8ebe7; color: #a94d3a; font-size: 12px; }
+.auth-switch { margin: 18px 0 0; color: #7a8580; font-size: 12px; text-align: center; }
+.auth-switch a { color: var(--green); font-weight: 700; }
 
 @keyframes rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }

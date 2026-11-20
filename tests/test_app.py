@@ -12,6 +12,11 @@ class TaskApiTests(unittest.TestCase):
         self.tasks_file = Path(self.temporary_directory.name) / "tasks.json"
         self.app = create_app({"TESTING": True, "TASKS_FILE": self.tasks_file})
         self.client = self.app.test_client()
+        signup = self.client.post(
+            "/signup",
+            data={"email": "owner@example.com", "password": "password123"},
+        )
+        self.assertEqual(signup.status_code, 302)
 
     def tearDown(self):
         self.temporary_directory.cleanup()
@@ -94,8 +99,25 @@ class TaskApiTests(unittest.TestCase):
 
         response = app.test_client().get("/api/tasks")
 
-        self.assertEqual(response.status_code, 503)
-        self.assertIn("MONGO_URI", response.get_json()["error"])
+        self.assertEqual(response.status_code, 401)
+
+    def test_tasks_are_private_between_accounts(self):
+        own_task = self.create_task(title="Private task")
+
+        logout = self.client.post("/logout")
+        self.assertEqual(logout.status_code, 302)
+        self.assertEqual(self.client.get("/api/tasks").status_code, 401)
+
+        signup = self.client.post(
+            "/signup",
+            data={"email": "other@example.com", "password": "password456"},
+        )
+        self.assertEqual(signup.status_code, 302)
+        self.assertEqual(self.client.get("/api/tasks").get_json(), [])
+        self.assertEqual(
+            self.client.delete(f"/api/tasks/{own_task['id']}").status_code,
+            404,
+        )
 
     def test_robots_and_sitemap_use_the_request_host(self):
         robots = self.client.get("/robots.txt", base_url="https://tasks.example")

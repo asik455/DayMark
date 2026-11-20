@@ -36,6 +36,8 @@ python app.py
 
 Set `MONGO_URI` in a local `.env` file before starting the app. Copy `.env.example` as a starting point and replace the placeholders with your Atlas connection string. The `.env` file is ignored by Git. Ensure the Atlas database user and network access list allow this application to connect. The database defaults to the name in the connection string (or `mydb` if none is present).
 
+Set `SECRET_KEY` to a long random value in production. Daymark accounts and task ownership are stored in MongoDB; each signed-in account can only access its own tasks.
+
 On its first MongoDB operation, the app imports tasks from an existing `instance/tasks.json` file that are not already present in the MongoDB `tasks` collection. New records include `id`, `title`, `description`, `priority`, `status`, `due_date`, `created_at`, and `updated_at`.
 
 Open <http://127.0.0.1:5000> in your browser. The workspace is at <http://127.0.0.1:5000/dashboard>.

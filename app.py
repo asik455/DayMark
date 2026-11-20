@@ -6,9 +6,19 @@ from pathlib import Path
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, render_template, request
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import PyMongoError
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 PRIORITIES = {"Low", "Medium", "High"}
@@ -30,13 +40,22 @@ def create_app(test_config=None):
         MONGO_DB_NAME=os.environ.get("MONGO_DB_NAME", "mydb"),
         MAX_CONTENT_LENGTH=1024 * 1024,
         SITE_URL=os.environ.get("SITE_URL", "").rstrip("/"),
+        SECRET_KEY=os.environ.get("SECRET_KEY", os.environ.get("FLASK_SECRET_KEY", "")),
     )
     if test_config:
         app.config.update(test_config)
+    if not app.config["SECRET_KEY"]:
+        app.config["SECRET_KEY"] = os.urandom(32)
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_SECURE"] = not app.config["TESTING"]
 
     app.extensions["mongo_client"] = None
     app.extensions["tasks_collection"] = None
+    app.extensions["users_collection"] = None
     app.extensions["mongo_initialized"] = False
+    app.extensions["users_initialized"] = False
+    app.extensions["test_users"] = {}
 
     def read_json_tasks(path):
         path = Path(path)
@@ -72,21 +91,60 @@ def create_app(test_config=None):
             app.extensions["tasks_collection"] = collection
         if not app.extensions["mongo_initialized"]:
             collection.create_index("id", unique=True)
-            for task in read_json_tasks(app.config["LEGACY_TASKS_FILE"]):
-                if isinstance(task, dict) and isinstance(task.get("id"), str):
-                    collection.update_one(
-                        {"id": task["id"]},
-                        {"$setOnInsert": task},
-                        upsert=True,
-                    )
             app.extensions["mongo_initialized"] = True
         return collection
 
-    def read_tasks():
+    def get_users_collection():
         if app.config["TASKS_FILE"] is not None:
-            return read_json_tasks(app.config["TASKS_FILE"])
+            return None
+        collection = app.extensions["users_collection"]
+        if collection is None:
+            mongo_uri = app.config["MONGO_URI"]
+            if not mongo_uri:
+                raise DatabaseConfigurationError(
+                    "MongoDB is not configured. Set MONGO_URI in the environment."
+                )
+            mongo_client = MongoClient(
+                mongo_uri,
+                w=1,
+                wtimeoutms=5000,
+                serverSelectionTimeoutMS=15000,
+            )
+            database = mongo_client.get_default_database(
+                default=app.config["MONGO_DB_NAME"]
+            )
+            collection = database["users"]
+            app.extensions["mongo_client"] = mongo_client
+            app.extensions["users_collection"] = collection
+        if not app.extensions["users_initialized"]:
+            collection.create_index("email", unique=True)
+            app.extensions["users_initialized"] = True
+        return collection
+
+    def current_user_id():
+        return session.get("user_id")
+
+    def require_user():
+        user_id = current_user_id()
+        if not user_id:
+            if request.path.startswith("/api/"):
+                return None, (jsonify({"error": "Please sign in."}), 401)
+            return None, redirect(url_for("login"))
+        return user_id, None
+
+    def read_tasks(owner_id=None):
+        if app.config["TASKS_FILE"] is not None:
+            owner_id = owner_id or current_user_id()
+            return [
+                task
+                for task in read_json_tasks(app.config["TASKS_FILE"])
+                if task.get("owner_id") == owner_id
+            ]
         collection = get_tasks_collection()
-        documents = collection.find().sort([("created_at", 1), ("id", 1)])
+        owner_id = owner_id or current_user_id()
+        documents = collection.find({"owner_id": owner_id}).sort(
+            [("created_at", 1), ("id", 1)]
+        )
         return [
             {key: value for key, value in task.items() if key != "_id"}
             for task in documents
@@ -161,9 +219,79 @@ def create_app(test_config=None):
     def landing():
         return render_template("index.html")
 
+    @app.route("/signup", methods=["GET", "POST"])
+    def signup():
+        if current_user_id():
+            return redirect(url_for("dashboard"))
+        error = None
+        if request.method == "POST":
+            email = request.form.get("email", "").strip().casefold()
+            password = request.form.get("password", "")
+            if not email or "@" not in email:
+                error = "Enter a valid email address."
+            elif len(password) < 8:
+                error = "Password must be at least 8 characters."
+            else:
+                user_id = str(uuid4())
+                if app.config["TASKS_FILE"] is not None:
+                    users = app.extensions["test_users"]
+                    if email in users:
+                        error = "An account with this email already exists."
+                    else:
+                        users[email] = {
+                            "id": user_id,
+                            "email": email,
+                            "password_hash": generate_password_hash(password),
+                        }
+                else:
+                    users = get_users_collection()
+                    if users.find_one({"email": email}):
+                        error = "An account with this email already exists."
+                    else:
+                        users.insert_one({
+                            "id": user_id,
+                            "email": email,
+                            "password_hash": generate_password_hash(password),
+                        })
+                if not error:
+                    session["user_id"] = user_id
+                    session["email"] = email
+                    session.permanent = True
+                    return redirect(url_for("dashboard"))
+        return render_template("auth.html", mode="signup", error=error)
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if current_user_id():
+            return redirect(url_for("dashboard"))
+        error = None
+        if request.method == "POST":
+            email = request.form.get("email", "").strip().casefold()
+            password = request.form.get("password", "")
+            if app.config["TASKS_FILE"] is not None:
+                user = app.extensions["test_users"].get(email)
+            else:
+                user = get_users_collection().find_one({"email": email})
+            if not user or not check_password_hash(user["password_hash"], password):
+                error = "Email or password is incorrect."
+            else:
+                session["user_id"] = user["id"]
+                session["email"] = user["email"]
+                session.permanent = True
+                return redirect(url_for("dashboard"))
+        return render_template("auth.html", mode="login", error=error)
+
+    @app.post("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("landing"))
+
     @app.get("/dashboard")
     def dashboard():
-        return render_template("dashboard.html")
+        user_id, auth_response = require_user()
+        if auth_response:
+            return auth_response
+        return render_template("dashboard.html", email=session.get("email", ""))
 
     @app.get("/robots.txt")
     def robots():
@@ -182,7 +310,10 @@ def create_app(test_config=None):
 
     @app.get("/api/tasks")
     def list_tasks():
-        tasks = read_tasks()
+        user_id, auth_response = require_user()
+        if auth_response:
+            return auth_response
+        tasks = read_tasks(user_id)
         search = request.args.get("q", "").strip().casefold()
         status = request.args.get("status", "").strip()
         priority = request.args.get("priority", "").strip()
@@ -201,7 +332,10 @@ def create_app(test_config=None):
 
     @app.get("/api/stats")
     def task_stats():
-        tasks = read_tasks()
+        user_id, auth_response = require_user()
+        if auth_response:
+            return auth_response
+        tasks = read_tasks(user_id)
         return jsonify(
             {
                 "total": len(tasks),
@@ -215,6 +349,9 @@ def create_app(test_config=None):
 
     @app.post("/api/tasks")
     def create_task():
+        user_id, auth_response = require_user()
+        if auth_response:
+            return auth_response
         data, error = validate_task(request.get_json(silent=True))
         if error:
             return jsonify({"error": error}), 400
@@ -224,9 +361,10 @@ def create_app(test_config=None):
             **data,
             "created_at": now,
             "updated_at": now,
+            "owner_id": user_id,
         }
         if app.config["TASKS_FILE"] is not None:
-            tasks = read_tasks()
+            tasks = read_json_tasks(app.config["TASKS_FILE"])
             tasks.append(task)
             write_tasks(tasks)
         else:
@@ -235,13 +373,16 @@ def create_app(test_config=None):
 
     @app.put("/api/tasks/<task_id>")
     def update_task(task_id):
+        user_id, auth_response = require_user()
+        if auth_response:
+            return auth_response
         data, error = validate_task(request.get_json(silent=True))
         if error:
             return jsonify({"error": error}), 400
         if app.config["TASKS_FILE"] is not None:
-            tasks = read_tasks()
+            tasks = read_json_tasks(app.config["TASKS_FILE"])
             for index, task in enumerate(tasks):
-                if task["id"] == task_id:
+                if task["id"] == task_id and task.get("owner_id") == user_id:
                     updated = {
                         **task,
                         **data,
@@ -252,7 +393,7 @@ def create_app(test_config=None):
                     return jsonify(updated)
         else:
             updated = get_tasks_collection().find_one_and_update(
-                {"id": task_id},
+                {"id": task_id, "owner_id": user_id},
                 {
                     "$set": {
                         **data,
@@ -268,14 +409,22 @@ def create_app(test_config=None):
 
     @app.delete("/api/tasks/<task_id>")
     def delete_task(task_id):
+        user_id, auth_response = require_user()
+        if auth_response:
+            return auth_response
         if app.config["TASKS_FILE"] is not None:
-            tasks = read_tasks()
-            remaining = [task for task in tasks if task["id"] != task_id]
+            tasks = read_json_tasks(app.config["TASKS_FILE"])
+            remaining = [
+                task for task in tasks
+                if not (task["id"] == task_id and task.get("owner_id") == user_id)
+            ]
             if len(remaining) == len(tasks):
                 return jsonify({"error": "Task not found."}), 404
             write_tasks(remaining)
         else:
-            result = get_tasks_collection().delete_one({"id": task_id})
+            result = get_tasks_collection().delete_one(
+                {"id": task_id, "owner_id": user_id}
+            )
             if result.deleted_count == 0:
                 return jsonify({"error": "Task not found."}), 404
         return jsonify({"message": "Task deleted."})

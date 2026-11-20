@@ -14,7 +14,7 @@
 <body class="dashboard-page">
   <header class="workspace-header">
     <a class="brand" href="/" aria-label="Daymark home"><span class="brand-mark">d</span>daymark</a>
-    <div class="header-right"><span class="local-label"><span></span> Saved to your workspace</span><a class="home-link" href="/">Back to home <span aria-hidden="true">↗</span></a></div>
+    <div class="header-right"><span class="local-label"><span></span> {{ email }}</span><form method="post" action="/logout"><button class="home-link logout-button" type="submit">Sign out</button></form></div>
   </header>
 
   <main class="workspace wrap">
