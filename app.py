@@ -34,16 +34,8 @@ def create_app(test_config=None):
     if test_config:
         app.config.update(test_config)
 
-    mongo_client = None
-    tasks_collection = None
-    if app.config["TASKS_FILE"] is None and app.config["MONGO_URI"]:
-        mongo_client = MongoClient(app.config["MONGO_URI"])
-        database = mongo_client.get_default_database(
-            default=app.config["MONGO_DB_NAME"]
-        )
-        tasks_collection = database["tasks"]
-    app.extensions["mongo_client"] = mongo_client
-    app.extensions["tasks_collection"] = tasks_collection
+    app.extensions["mongo_client"] = None
+    app.extensions["tasks_collection"] = None
     app.extensions["mongo_initialized"] = False
 
     def read_json_tasks(path):
@@ -61,9 +53,18 @@ def create_app(test_config=None):
     def get_tasks_collection():
         collection = app.extensions["tasks_collection"]
         if collection is None:
-            raise DatabaseConfigurationError(
-                "MongoDB is not configured. Set MONGO_URI in the environment."
+            mongo_uri = app.config["MONGO_URI"]
+            if not mongo_uri:
+                raise DatabaseConfigurationError(
+                    "MongoDB is not configured. Set MONGO_URI in the environment."
+                )
+            mongo_client = MongoClient(mongo_uri)
+            database = mongo_client.get_default_database(
+                default=app.config["MONGO_DB_NAME"]
             )
+            collection = database["tasks"]
+            app.extensions["mongo_client"] = mongo_client
+            app.extensions["tasks_collection"] = collection
         if not app.extensions["mongo_initialized"]:
             collection.create_index("id", unique=True)
             for task in read_json_tasks(app.config["LEGACY_TASKS_FILE"]):
@@ -107,7 +108,9 @@ def create_app(test_config=None):
 
     @app.errorhandler(PyMongoError)
     def handle_database_error(error):
-        app.logger.error("MongoDB operation failed: %s", type(error).__name__)
+        app.logger.exception(
+            "MongoDB operation failed: %s", type(error).__name__
+        )
         return jsonify({"error": "MongoDB is unavailable."}), 503
 
     def validate_task(data):
